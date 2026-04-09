@@ -5,8 +5,18 @@ using DiscordBot.Noteworthy.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// コンソールログの色付き表示を有効化
+// Warning → 黄色、Error/Critical → 赤色
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.ColorBehavior = LoggerColorBehavior.Enabled;
+    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+});
 
 // 実行ファイルのディレクトリを基準にする（dotnet run / exe 両対応）
 var baseDir = AppContext.BaseDirectory;
@@ -29,6 +39,7 @@ builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig
 builder.Services.AddHttpClient<ArticleScraperService>();
 
 // サービス登録
+builder.Services.AddSingleton<PostedArticleStore>();
 builder.Services.AddSingleton<ForumPosterService>();
 builder.Services.AddHostedService<DiscordBotService>();
 builder.Services.AddHostedService<ArticleCheckWorker>();

@@ -17,15 +17,18 @@ public sealed class ForumPosterService
 
     private readonly DiscordSocketClient _client;
     private readonly BotConfig _config;
+    private readonly PostedArticleStore _store;
     private readonly ILogger<ForumPosterService> _logger;
 
     public ForumPosterService(
         DiscordSocketClient client,
         IOptions<BotConfig> config,
+        PostedArticleStore store,
         ILogger<ForumPosterService> logger)
     {
         _client = client;
         _config = config.Value;
+        _store = store;
         _logger = logger;
     }
 
@@ -41,8 +44,8 @@ public sealed class ForumPosterService
             return;
         }
 
-        // 同じ URL のスレッドが既に存在するかチェック
-        if (await IsAlreadyPostedAsync(channel, article.Url))
+        // 投稿済みならスキップ
+        if (_store.IsPosted(article.Url))
         {
             _logger.LogDebug("既に投稿済みの記事をスキップ: {Title}", article.Title);
             return;
@@ -69,6 +72,8 @@ public sealed class ForumPosterService
             }
         }
 
+        // 投稿済みとして記録
+        _store.MarkAsPosted(article.Url);
         _logger.LogInformation("記事を投稿しました: {Title}", article.Title);
     }
 
@@ -172,22 +177,6 @@ public sealed class ForumPosterService
         }
 
         return chunks;
-    }
-
-    private static async Task<bool> IsAlreadyPostedAsync(IForumChannel channel, string articleUrl)
-    {
-        var threads = await channel.GetActiveThreadsAsync();
-        foreach (var thread in threads)
-        {
-            var messages = await thread.GetMessagesAsync(1).FlattenAsync();
-            var firstMessage = messages.FirstOrDefault();
-            if (firstMessage?.Content?.Contains(articleUrl, StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static string Truncate(string value, int maxLength)
