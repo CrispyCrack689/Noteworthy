@@ -60,19 +60,17 @@ public sealed class ArticleCheckWorker : BackgroundService
                 maxCount: 5,
                 cancellationToken);
 
-            // RSS でサムネイルが取れなかった記事は OGP から取得
+            // 各記事のページから本文とサムネイルを取得
             var enrichedArticles = new List<Models.Article>();
             foreach (var article in articles)
             {
-                if (string.IsNullOrEmpty(article.ThumbnailUrl))
+                var (body, ogpImage) = await _scraper.FetchArticleContentAsync(article.Url, cancellationToken);
+
+                enrichedArticles.Add(article with
                 {
-                    var ogpImage = await _scraper.FetchOgpImageAsync(article.Url, cancellationToken);
-                    enrichedArticles.Add(article with { ThumbnailUrl = ogpImage });
-                }
-                else
-                {
-                    enrichedArticles.Add(article);
-                }
+                    Body = body,
+                    ThumbnailUrl = article.ThumbnailUrl ?? ogpImage,
+                });
             }
 
             await _poster.PostArticlesAsync(enrichedArticles, cancellationToken);

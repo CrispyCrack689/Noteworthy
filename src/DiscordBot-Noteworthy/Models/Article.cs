@@ -17,6 +17,9 @@ public sealed record Article
     /// <summary>サムネイル画像の URL。</summary>
     public string? ThumbnailUrl { get; init; }
 
+    /// <summary>記事本文。</summary>
+    public string? Body { get; init; }
+
     /// <summary>著者名。</summary>
     public string? Author { get; init; }
 

@@ -108,6 +108,41 @@ public sealed class ArticleScraperService
     }
 
     /// <summary>
+    /// 記事ページから本文テキストと OGP 画像を取得する。
+    /// </summary>
+    public async Task<(string? body, string? ogpImage)> FetchArticleContentAsync(
+        string url,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var html = await _httpClient.GetStringAsync(url, cancellationToken);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            // maintext セクションの存在をデバッグ
+            var maintextNode = doc.DocumentNode.SelectSingleNode("//section[contains(@class,'maintext')]");
+            var entryNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'entry-content')]");
+            _logger.LogInformation(
+                "HTML解析 — maintext: {HasMaintext}, entry-content: {HasEntry}, HTML長: {HtmlLen}, URL: {Url}",
+                maintextNode is not null,
+                entryNode is not null,
+                html.Length,
+                url);
+
+            var body = ExtractArticleBody(doc);
+            var ogpImage = ExtractOgpImage(doc);
+
+            return (body, ogpImage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "記事コンテンツの取得に失敗: {Url}", url);
+            return (null, null);
+        }
+    }
+
+    /// <summary>
     /// ページの OGP メタタグからサムネイル画像を取得する。
     /// RSS でサムネイルが取れなかった場合のフォールバック用。
     /// </summary>
@@ -234,5 +269,91 @@ public sealed class ArticleScraperService
         }
 
         return null;
+    }
+
+    private static string? ExtractArticleBody(HtmlDocument doc)
+    {
+        // 優先順位の高い順に個別に探す（XPath | は document order を返すため）
+        string[] selectors =
+        [
+            "//section[contains(@class,'maintext')]",
+            "//div[contains(@class,'article-body')]",
+            "//div[contains(@class,'post-content')]",
+            "//div[contains(@class,'entry-content') and contains(@class,'is-layout-flow')]",
+            "//article//div[contains(@class,'entry-content')]",
+        ];
+
+        HtmlNode? contentNode = null;
+        foreach (var selector in selectors)
+        {
+            contentNode = doc.DocumentNode.SelectSingleNode(selector);
+            if (contentNode is not null)
+            {
+                break;
+            }
+        }
+
+        if (contentNode is null)
+        {
+            return null;
+        }
+
+        // script / style / 広告 / 関連記事ブロックを除去
+        RemoveNodes(contentNode, ".//script | .//style | .//nav | .//aside");
+        RemoveNodes(contentNode, ".//*[contains(@class,'related')] | .//*[contains(@class,'crp')]");
+        RemoveNodes(contentNode, ".//*[contains(@class,'ad-')] | .//*[contains(@class,'ai-')]");
+
+        // テキストを段落ごとに抽出
+        var paragraphs = contentNode.SelectNodes(".//p | .//h2 | .//h3 | .//h4 | .//blockquote | .//li");
+        if (paragraphs is null || paragraphs.Count == 0)
+        {
+            var plainText = HtmlEntity.DeEntitize(contentNode.InnerText).Trim();
+            return string.IsNullOrWhiteSpace(plainText) ? null : plainText;
+        }
+
+        var lines = new List<string>();
+        foreach (var node in paragraphs)
+        {
+            var text = HtmlEntity.DeEntitize(node.InnerText).Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            var prefix = node.Name.ToUpperInvariant() switch
+            {
+                "H2" => "## ",
+                "H3" => "### ",
+                "H4" => "#### ",
+                "BLOCKQUOTE" => "> ",
+                "LI" => "- ",
+                _ => "",
+            };
+
+            lines.Add($"{prefix}{text}");
+        }
+
+        return lines.Count > 0 ? string.Join("\n\n", lines) : null;
+    }
+
+    private static string? ExtractOgpImage(HtmlDocument doc)
+    {
+        return doc.DocumentNode
+            .SelectSingleNode("//meta[@property='og:image']")?
+            .GetAttributeValue("content", null!);
+    }
+
+    private static void RemoveNodes(HtmlNode parent, string xpath)
+    {
+        var nodes = parent.SelectNodes(xpath);
+        if (nodes is null)
+        {
+            return;
+        }
+
+        foreach (var node in nodes)
+        {
+            node.ParentNode.RemoveChild(node);
+        }
     }
 }
