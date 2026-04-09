@@ -8,8 +8,12 @@ using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// トークンを別ファイルから読み込み（git 管理外）
-builder.Configuration.AddJsonFile("appsettings.Secret.json", optional: false, reloadOnChange: false);
+// 実行ファイルのディレクトリを基準にする（dotnet run / exe 両対応）
+var baseDir = AppContext.BaseDirectory;
+builder.Configuration
+    .SetBasePath(baseDir)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+    .AddJsonFile("appsettings.Secret.json", optional: false, reloadOnChange: false);
 
 // 設定のバインド
 builder.Services.Configure<BotConfig>(builder.Configuration.GetSection(BotConfig.SectionName));

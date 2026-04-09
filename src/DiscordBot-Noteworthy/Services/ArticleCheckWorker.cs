@@ -54,8 +54,9 @@ public sealed class ArticleCheckWorker : BackgroundService
         {
             _logger.LogInformation("記事チェックを実行中...");
 
+            var feedUrl = await _scraper.DiscoverFeedUrlAsync(_config.TargetSiteUrl, cancellationToken);
             var articles = await _scraper.FetchArticlesFromRssAsync(
-                _config.TargetSiteUrl,
+                feedUrl,
                 maxCount: 5,
                 cancellationToken);
 

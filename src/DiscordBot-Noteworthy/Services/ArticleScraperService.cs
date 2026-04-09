@@ -32,7 +32,12 @@ public sealed class ArticleScraperService
         _logger.LogInformation("RSS フィードを取得中: {FeedUrl}", feedUrl);
 
         using var stream = await _httpClient.GetStreamAsync(feedUrl, cancellationToken);
-        using var reader = XmlReader.Create(stream);
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Parse,
+            MaxCharactersFromEntities = 1024,
+        };
+        using var reader = XmlReader.Create(stream, settings);
         var feed = SyndicationFeed.Load(reader);
 
         var articles = new List<Article>();
@@ -60,6 +65,46 @@ public sealed class ArticleScraperService
 
         _logger.LogInformation("{Count} 件の記事を取得しました", articles.Count);
         return articles;
+    }
+
+    /// <summary>
+    /// サイト URL から RSS フィードの URL を自動検出する。
+    /// HTML 内の &lt;link rel="alternate" type="application/rss+xml"&gt; を探す。
+    /// 見つからない場合は /feed/ を試す。
+    /// </summary>
+    public async Task<string> DiscoverFeedUrlAsync(string siteUrl, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var html = await _httpClient.GetStringAsync(siteUrl, cancellationToken);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            var feedLink = doc.DocumentNode.SelectSingleNode(
+                "//link[@rel='alternate' and (@type='application/rss+xml' or @type='application/atom+xml')]");
+
+            var href = feedLink?.GetAttributeValue("href", null!);
+            if (!string.IsNullOrEmpty(href))
+            {
+                if (!Uri.IsWellFormedUriString(href, UriKind.Absolute))
+                {
+                    href = new Uri(new Uri(siteUrl), href).AbsoluteUri;
+                }
+
+                _logger.LogInformation("RSS フィードを検出しました: {FeedUrl}", href);
+                return href;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "RSS フィード検出中にエラー。フォールバックを試みます");
+        }
+
+        // フォールバック: よくあるパスを試す
+        var baseUri = new Uri(siteUrl.TrimEnd('/') + "/");
+        var fallbackUrl = new Uri(baseUri, "feed/").AbsoluteUri;
+        _logger.LogInformation("フォールバック RSS URL を使用: {FeedUrl}", fallbackUrl);
+        return fallbackUrl;
     }
 
     /// <summary>
