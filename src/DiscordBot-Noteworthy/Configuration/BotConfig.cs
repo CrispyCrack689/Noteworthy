@@ -10,11 +10,8 @@ public sealed class BotConfig
     /// <summary>Discord Bot トークン。</summary>
     public required string Token { get; init; }
 
-    /// <summary>投稿先のフォーラムチャンネル ID。</summary>
-    public required ulong ForumChannelId { get; init; }
-
-    /// <summary>記事を取得する対象サイトのリスト。</summary>
-    public required List<TargetSiteConfig> TargetSites { get; init; }
+    /// <summary>フォーラムチャンネルごとの設定リスト。</summary>
+    public required List<ForumChannelConfig> ForumChannels { get; init; }
 
     /// <summary>記事チェックの間隔（分）。</summary>
     public int CheckIntervalMinutes { get; init; } = 30;

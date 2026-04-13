@@ -32,10 +32,12 @@ public sealed class ArticleCheckWorker : BackgroundService
         // Discord クライアントの準備完了を待つ
         await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
+        var totalSites = _config.ForumChannels.Sum(fc => fc.TargetSites.Count);
         _logger.LogInformation(
-            "記事チェックワーカー開始 — 間隔: {Interval}分, 対象サイト数: {Count}",
+            "記事チェックワーカー開始 — 間隔: {Interval}分, フォーラム数: {ForumCount}, 対象サイト数: {SiteCount}",
             _config.CheckIntervalMinutes,
-            _config.TargetSites.Count);
+            _config.ForumChannels.Count,
+            totalSites);
 
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_config.CheckIntervalMinutes));
 
@@ -52,23 +54,29 @@ public sealed class ArticleCheckWorker : BackgroundService
     {
         _logger.LogInformation("記事チェックを実行中...");
 
-        foreach (var site in _config.TargetSites)
+        foreach (var forumChannel in _config.ForumChannels)
         {
-            try
+            foreach (var site in forumChannel.TargetSites)
             {
-                _logger.LogInformation("サイトをチェック中: {Url} (タグ: {Tag})", site.Url, site.TagName);
+                try
+                {
+                    _logger.LogInformation(
+                        "サイトをチェック中: {Url} (タグ: {Tag}, チャンネル: {ChannelId})",
+                        site.Url, site.TagName, forumChannel.ForumChannelId);
 
-                var feedUrl = await _scraper.DiscoverFeedUrlAsync(site.Url, cancellationToken);
-                var articles = await _scraper.FetchArticlesFromRssAsync(
-                    feedUrl,
-                    maxCount: 5,
-                    cancellationToken);
+                    var feedUrl = await _scraper.DiscoverFeedUrlAsync(site.Url, cancellationToken);
+                    var articles = await _scraper.FetchArticlesFromRssAsync(
+                        feedUrl,
+                        maxCount: 5,
+                        cancellationToken);
 
-                await _poster.PostArticlesAsync(articles, site, cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "サイト {Url} の記事チェック中にエラーが発生しました", site.Url);
+                    await _poster.PostArticlesAsync(
+                        articles, forumChannel.ForumChannelId, site, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "サイト {Url} の記事チェック中にエラーが発生しました", site.Url);
+                }
             }
         }
 

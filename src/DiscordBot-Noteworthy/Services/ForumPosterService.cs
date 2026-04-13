@@ -4,7 +4,6 @@ using Discord.WebSocket;
 using DiscordBot.Noteworthy.Configuration;
 using DiscordBot.Noteworthy.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DiscordBot.Noteworthy.Services;
 
@@ -14,18 +13,15 @@ namespace DiscordBot.Noteworthy.Services;
 public sealed class ForumPosterService
 {
     private readonly DiscordSocketClient _client;
-    private readonly BotConfig _config;
     private readonly PostedArticleStore _store;
     private readonly ILogger<ForumPosterService> _logger;
 
     public ForumPosterService(
         DiscordSocketClient client,
-        IOptions<BotConfig> config,
         PostedArticleStore store,
         ILogger<ForumPosterService> logger)
     {
         _client = client;
-        _config = config.Value;
         _store = store;
         _logger = logger;
     }
@@ -33,12 +29,16 @@ public sealed class ForumPosterService
     /// <summary>
     /// 記事をフォーラムチャンネルに新しいスレッドとして投稿する。
     /// </summary>
-    public async Task PostArticleAsync(Article article, TargetSiteConfig? siteConfig = null, CancellationToken cancellationToken = default)
+    public async Task PostArticleAsync(
+        Article article,
+        ulong forumChannelId,
+        TargetSiteConfig? siteConfig = null,
+        CancellationToken cancellationToken = default)
     {
-        var channel = _client.GetChannel(_config.ForumChannelId) as IForumChannel;
+        var channel = _client.GetChannel(forumChannelId) as IForumChannel;
         if (channel is null)
         {
-            _logger.LogError("フォーラムチャンネルが見つかりません: {ChannelId}", _config.ForumChannelId);
+            _logger.LogError("フォーラムチャンネルが見つかりません: {ChannelId}", forumChannelId);
             return;
         }
 
@@ -72,7 +72,11 @@ public sealed class ForumPosterService
     /// <summary>
     /// 複数の記事を一括投稿する。
     /// </summary>
-    public async Task PostArticlesAsync(IEnumerable<Article> articles, TargetSiteConfig? siteConfig = null, CancellationToken cancellationToken = default)
+    public async Task PostArticlesAsync(
+        IEnumerable<Article> articles,
+        ulong forumChannelId,
+        TargetSiteConfig? siteConfig = null,
+        CancellationToken cancellationToken = default)
     {
         foreach (var article in articles)
         {
@@ -81,7 +85,7 @@ public sealed class ForumPosterService
                 break;
             }
 
-            await PostArticleAsync(article, siteConfig, cancellationToken);
+            await PostArticleAsync(article, forumChannelId, siteConfig, cancellationToken);
 
             // レートリミット対策
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
