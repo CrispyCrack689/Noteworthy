@@ -33,9 +33,9 @@ public sealed class ArticleCheckWorker : BackgroundService
         await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
         _logger.LogInformation(
-            "記事チェックワーカー開始 — 間隔: {Interval}分, 対象: {Url}",
+            "記事チェックワーカー開始 — 間隔: {Interval}分, 対象サイト数: {Count}",
             _config.CheckIntervalMinutes,
-            _config.TargetSiteUrl);
+            _config.TargetSites.Count);
 
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_config.CheckIntervalMinutes));
 
@@ -50,36 +50,41 @@ public sealed class ArticleCheckWorker : BackgroundService
 
     private async Task CheckAndPostAsync(CancellationToken cancellationToken)
     {
-        try
+        _logger.LogInformation("記事チェックを実行中...");
+
+        foreach (var site in _config.TargetSites)
         {
-            _logger.LogInformation("記事チェックを実行中...");
-
-            var feedUrl = await _scraper.DiscoverFeedUrlAsync(_config.TargetSiteUrl, cancellationToken);
-            var articles = await _scraper.FetchArticlesFromRssAsync(
-                feedUrl,
-                maxCount: 5,
-                cancellationToken);
-
-            // 各記事のページから本文とサムネイルを取得
-            var enrichedArticles = new List<Models.Article>();
-            foreach (var article in articles)
+            try
             {
-                var (body, ogpImage) = await _scraper.FetchArticleContentAsync(article.Url, cancellationToken);
+                _logger.LogInformation("サイトをチェック中: {Url} (タグ: {Tag})", site.Url, site.TagName);
 
-                enrichedArticles.Add(article with
+                var feedUrl = await _scraper.DiscoverFeedUrlAsync(site.Url, cancellationToken);
+                var articles = await _scraper.FetchArticlesFromRssAsync(
+                    feedUrl,
+                    maxCount: 5,
+                    cancellationToken);
+
+                // 各記事のページから本文とサムネイルを取得
+                var enrichedArticles = new List<Models.Article>();
+                foreach (var article in articles)
                 {
-                    Body = body,
-                    ThumbnailUrl = article.ThumbnailUrl ?? ogpImage,
-                });
+                    var (body, ogpImage) = await _scraper.FetchArticleContentAsync(article.Url, cancellationToken);
+
+                    enrichedArticles.Add(article with
+                    {
+                        Body = body,
+                        ThumbnailUrl = article.ThumbnailUrl ?? ogpImage,
+                    });
+                }
+
+                await _poster.PostArticlesAsync(enrichedArticles, site, cancellationToken);
             }
-
-            await _poster.PostArticlesAsync(enrichedArticles, cancellationToken);
-
-            _logger.LogInformation("記事チェック完了");
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "サイト {Url} の記事チェック中にエラーが発生しました", site.Url);
+            }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "記事チェック中にエラーが発生しました");
-        }
+
+        _logger.LogInformation("記事チェック完了");
     }
 }

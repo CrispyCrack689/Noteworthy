@@ -23,6 +23,7 @@ public sealed class ArticleScraperService
 
     /// <summary>
     /// RSS フィードから最新記事の一覧を取得する。
+    /// RSS 2.0 / Atom に加え、RDF 1.0 (RSS 1.0) フォーマットにも対応する。
     /// </summary>
     public async Task<IReadOnlyList<Article>> FetchArticlesFromRssAsync(
         string feedUrl,
@@ -31,13 +32,21 @@ public sealed class ArticleScraperService
     {
         _logger.LogInformation("RSS フィードを取得中: {FeedUrl}", feedUrl);
 
-        using var stream = await _httpClient.GetStreamAsync(feedUrl, cancellationToken);
+        var xml = await _httpClient.GetStringAsync(feedUrl, cancellationToken);
+
+        // RDF 1.0 (RSS 1.0) かどうかを判定
+        if (xml.Contains("http://www.w3.org/1999/02/22-rdf-syntax-ns#", StringComparison.Ordinal))
+        {
+            return ParseRdfFeed(xml, maxCount);
+        }
+
+        using var stringReader = new System.IO.StringReader(xml);
         var settings = new XmlReaderSettings
         {
             DtdProcessing = DtdProcessing.Parse,
             MaxCharactersFromEntities = 1024,
         };
-        using var reader = XmlReader.Create(stream, settings);
+        using var reader = XmlReader.Create(stringReader, settings);
         var feed = SyndicationFeed.Load(reader);
 
         var articles = new List<Article>();
@@ -64,6 +73,61 @@ public sealed class ArticleScraperService
         }
 
         _logger.LogInformation("{Count} 件の記事を取得しました", articles.Count);
+        return articles;
+    }
+
+    /// <summary>
+    /// RDF 1.0 (RSS 1.0) フォーマットのフィードをパースする。
+    /// </summary>
+    private IReadOnlyList<Article> ParseRdfFeed(string xml, int maxCount)
+    {
+        var doc = new XmlDocument();
+        doc.LoadXml(xml);
+
+        var nsManager = new XmlNamespaceManager(doc.NameTable);
+        nsManager.AddNamespace("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
+        nsManager.AddNamespace("rss", "http://purl.org/rss/1.0/");
+        nsManager.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
+
+        var items = doc.SelectNodes("//rss:item", nsManager);
+        var articles = new List<Article>();
+
+        if (items is null)
+        {
+            _logger.LogWarning("RDF フィードに記事が見つかりませんでした");
+            return articles;
+        }
+
+        foreach (XmlNode item in items.Cast<XmlNode>().Take(maxCount))
+        {
+            var title = item.SelectSingleNode("rss:title", nsManager)?.InnerText ?? "No Title";
+            var link = item.SelectSingleNode("rss:link", nsManager)?.InnerText ?? string.Empty;
+            var description = item.SelectSingleNode("rss:description", nsManager)?.InnerText;
+            var author = item.SelectSingleNode("dc:creator", nsManager)?.InnerText;
+            var dateStr = item.SelectSingleNode("dc:date", nsManager)?.InnerText;
+
+            if (string.IsNullOrEmpty(link))
+            {
+                continue;
+            }
+
+            DateTimeOffset? publishedAt = null;
+            if (DateTimeOffset.TryParse(dateStr, out var parsed))
+            {
+                publishedAt = parsed;
+            }
+
+            articles.Add(new Article
+            {
+                Title = title,
+                Url = link,
+                Description = description,
+                Author = author,
+                PublishedAt = publishedAt,
+            });
+        }
+
+        _logger.LogInformation("{Count} 件の記事を RDF フィードから取得しました", articles.Count);
         return articles;
     }
 
