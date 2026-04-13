@@ -64,20 +64,7 @@ public sealed class ArticleCheckWorker : BackgroundService
                     maxCount: 5,
                     cancellationToken);
 
-                // 各記事のページから本文とサムネイルを取得
-                var enrichedArticles = new List<Models.Article>();
-                foreach (var article in articles)
-                {
-                    var (body, ogpImage) = await _scraper.FetchArticleContentAsync(article.Url, cancellationToken);
-
-                    enrichedArticles.Add(article with
-                    {
-                        Body = body,
-                        ThumbnailUrl = article.ThumbnailUrl ?? ogpImage,
-                    });
-                }
-
-                await _poster.PostArticlesAsync(enrichedArticles, site, cancellationToken);
+                await _poster.PostArticlesAsync(articles, site, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

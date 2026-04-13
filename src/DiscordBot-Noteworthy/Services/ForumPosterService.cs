@@ -13,9 +13,6 @@ namespace DiscordBot.Noteworthy.Services;
 /// </summary>
 public sealed class ForumPosterService
 {
-    /// <summary>Discord メッセージの最大文字数。</summary>
-    private const int MaxMessageLength = 2000;
-
     private readonly DiscordSocketClient _client;
     private readonly BotConfig _config;
     private readonly PostedArticleStore _store;
@@ -66,18 +63,6 @@ public sealed class ForumPosterService
             embed: embed,
             tags: tags,
             options: new RequestOptions { CancelToken = cancellationToken });
-
-        // 2通目以降: 記事本文を投稿
-        if (!string.IsNullOrWhiteSpace(article.Body))
-        {
-            var chunks = SplitMessage(article.Body);
-            foreach (var chunk in chunks)
-            {
-                await thread.SendMessageAsync(
-                    text: chunk,
-                    options: new RequestOptions { CancelToken = cancellationToken });
-            }
-        }
 
         // 投稿済みとして記録
         _store.MarkAsPosted(article.Url);
@@ -132,58 +117,6 @@ public sealed class ForumPosterService
         builder.WithFooter("Noteworthy Bot");
 
         return builder.Build();
-    }
-
-    /// <summary>
-    /// メッセージを Discord の文字数制限に合わせて段落単位で分割する。
-    /// </summary>
-    private static List<string> SplitMessage(string text)
-    {
-        var chunks = new List<string>();
-        var paragraphs = text.Split("\n\n");
-        var current = "";
-
-        foreach (var paragraph in paragraphs)
-        {
-            // 段落1つでも制限を超える場合はさらに分割
-            if (paragraph.Length > MaxMessageLength)
-            {
-                if (current.Length > 0)
-                {
-                    chunks.Add(current.TrimEnd());
-                    current = "";
-                }
-
-                for (int i = 0; i < paragraph.Length; i += MaxMessageLength)
-                {
-                    var length = Math.Min(MaxMessageLength, paragraph.Length - i);
-                    chunks.Add(paragraph.Substring(i, length));
-                }
-
-                continue;
-            }
-
-            var combined = string.IsNullOrEmpty(current)
-                ? paragraph
-                : $"{current}\n\n{paragraph}";
-
-            if (combined.Length > MaxMessageLength)
-            {
-                chunks.Add(current.TrimEnd());
-                current = paragraph;
-            }
-            else
-            {
-                current = combined;
-            }
-        }
-
-        if (current.Length > 0)
-        {
-            chunks.Add(current.TrimEnd());
-        }
-
-        return chunks;
     }
 
     /// <summary>
