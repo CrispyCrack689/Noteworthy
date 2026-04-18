@@ -171,6 +171,36 @@ public sealed class ArticleScraperService
         return fallbackUrl;
     }
 
+    /// <summary>
+    /// 記事ページから OGP 画像の URL を取得する。
+    /// RSS フィードにサムネイルが含まれない場合のフォールバックとして使用する。
+    /// </summary>
+    public async Task<string?> FetchOgpImageAsync(string url, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var html = await _httpClient.GetStringAsync(url, cancellationToken);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            var ogpImage = doc.DocumentNode
+                .SelectSingleNode("//meta[@property='og:image']")?
+                .GetAttributeValue("content", null!);
+
+            if (!string.IsNullOrEmpty(ogpImage))
+            {
+                _logger.LogDebug("OGP 画像を取得しました: {Url}", ogpImage);
+            }
+
+            return ogpImage;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OGP 画像の取得に失敗: {Url}", url);
+            return null;
+        }
+    }
+
     private static string? ExtractImageFromContent(SyndicationItem item)
     {
         // media:thumbnail や media:content から取得

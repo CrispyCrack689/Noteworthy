@@ -70,8 +70,24 @@ public sealed class ArticleCheckWorker : BackgroundService
                         maxCount: 5,
                         cancellationToken);
 
+                    // サムネイルがない記事は OGP 画像をフォールバック取得
+                    var enrichedArticles = new List<Models.Article>(articles.Count);
+                    foreach (var article in articles)
+                    {
+                        if (string.IsNullOrEmpty(article.ThumbnailUrl))
+                        {
+                            var ogpImage = await _scraper.FetchOgpImageAsync(
+                                article.Url, cancellationToken);
+                            enrichedArticles.Add(article with { ThumbnailUrl = ogpImage });
+                        }
+                        else
+                        {
+                            enrichedArticles.Add(article);
+                        }
+                    }
+
                     await _poster.PostArticlesAsync(
-                        articles, forumChannel.ForumChannelId, site, cancellationToken);
+                        enrichedArticles, forumChannel.ForumChannelId, site, cancellationToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
