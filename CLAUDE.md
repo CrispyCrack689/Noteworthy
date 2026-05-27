@@ -2,15 +2,32 @@
 
 ## プロジェクト概要
 
-DiscordBot-Noteworthy — C# / .NET で構築する Discord Bot。
+DiscordBot-Noteworthy — C# / .NET で構築する Discord Bot。`Microsoft.Extensions.Hosting` ベースで実装。
+
+主な機能:
+
+- 複数サイトの RSS フィードを定期的にチェックし、新着記事を Discord フォーラムチャンネルに投稿
+- フォーラムチャンネルごとに対象サイト・タグを設定可能
+- 投稿済み記事は `data/posted_articles.json` で永続化して重複投稿を防止
 
 ## ビルド・実行
 
+ローカル開発:
+
 ```bash
 dotnet build
-dotnet run --project DiscordBot-Noteworthy
-dotnet test
+dotnet run --project src/DiscordBot-Noteworthy
 ```
+
+Docker (本番デプロイ。Ubuntu サーバー想定):
+
+```bash
+# .env (BOT_TOKEN=...) を用意した上で
+docker compose up -d --build
+docker compose logs -f bot
+```
+
+デプロイ手順の詳細は [README.md](README.md) を参照。
 
 ## コーディング規約（Microsoft .NET 準拠）
 
@@ -74,17 +91,22 @@ dotnet test
 
 ```
 DiscordBot-Noteworthy/
-├── DiscordBot-Noteworthy.sln
-├── src/
-│   └── DiscordBot-Noteworthy/
-│       ├── DiscordBot-Noteworthy.csproj
-│       ├── Program.cs
-│       ├── Commands/       # スラッシュコマンド・テキストコマンド
-│       ├── Services/       # ビジネスロジック
-│       ├── Models/         # データモデル・DTO
-│       └── Configuration/  # 設定関連
-└── tests/
-    └── DiscordBot-Noteworthy.Tests/
+├── DiscordBot-Noteworthy.slnx
+├── Dockerfile               # multi-stage build (SDK → runtime)
+├── compose.yaml             # 本番デプロイ用 (Bot__Token を .env 経由で注入)
+├── .dockerignore
+├── .env.example             # BOT_TOKEN テンプレート (実体 .env は gitignore)
+├── README.md                # デプロイ・運用手順
+├── data/                    # gitignore。posted_articles.json をホスト側で永続化
+└── src/
+    └── DiscordBot-Noteworthy/
+        ├── DiscordBot-Noteworthy.csproj
+        ├── Program.cs
+        ├── appsettings.json
+        ├── appsettings.Secret.json  # ローカル開発用 (gitignore / Docker では使わない)
+        ├── Configuration/   # IOptions 連携の設定クラス
+        ├── Models/          # データモデル・DTO
+        └── Services/        # ホステッドサービス・ビジネスロジック
 ```
 
 ### その他のルール
@@ -94,4 +116,4 @@ DiscordBot-Noteworthy/
 - アクセス修飾子は常に明示する（`private` も省略しない）
 - `this.` は冗長な場合は使わない
 - マジックナンバーは定数または設定値に置き換える
-- シークレット（トークン・APIキー）はコードにハードコードしない。環境変数または User Secrets を使う
+- シークレット（トークン・APIキー）はコードにハードコードしない。設定の優先順位は **環境変数 (`Bot__Token` 等) > `appsettings.Secret.json` > `appsettings.json`**。Docker デプロイ時は `.env` 経由で環境変数として渡し、`appsettings.Secret.json` はコンテナに含めない

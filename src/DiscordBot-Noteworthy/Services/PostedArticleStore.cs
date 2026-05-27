@@ -16,7 +16,10 @@ public sealed class PostedArticleStore
     public PostedArticleStore(ILogger<PostedArticleStore> logger)
     {
         _logger = logger;
-        _filePath = Path.Combine(AppContext.BaseDirectory, "posted_articles.json");
+        // Docker では ./data をホストから volume マウントする想定。ローカル実行でも bin/.../data に書き出す
+        var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+        Directory.CreateDirectory(dataDir);
+        _filePath = Path.Combine(dataDir, "posted_articles.json");
         _postedUrls = Load();
     }
 
