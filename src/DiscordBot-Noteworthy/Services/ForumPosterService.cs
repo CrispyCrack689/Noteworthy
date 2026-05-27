@@ -56,7 +56,7 @@ public sealed class ForumPosterService
             : null;
 
         // フォーラムにスレッドを作成（1通目: Embed + 元記事リンク）
-        var thread = await channel.CreatePostAsync(
+        await channel.CreatePostAsync(
             title: Truncate(article.Title, 100),
             text: article.Url,
             embed: embed,
