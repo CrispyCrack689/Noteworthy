@@ -1,0 +1,30 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/[Dd]ebug/
+**/[Rr]elease/
+
+# IDE / OS
+**/.vs/
+**/.idea/
+**/.vscode/
+.git/
+.gitignore
+
+# Local secrets / runtime data (コンテナでは環境変数 / volume mount から渡す)
+**/appsettings.Secret.json
+data/
+
+# Solution / docs (ビルドに不要)
+*.sln
+*.slnx
+README.md
+CLAUDE.md
+.claude/
+.claudeignore
+.dockerignore
+Dockerfile
+compose.yaml
+docker-compose.yml
+.env
+.env.example

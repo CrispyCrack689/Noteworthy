@@ -1,0 +1,18 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: discordbot-noteworthy:latest
+    container_name: discordbot-noteworthy
+    restart: unless-stopped
+    environment:
+      # Discord Bot Token は .env (gitignore) で渡す
+      Bot__Token: ${BOT_TOKEN}
+      # ログのタイムスタンプ等をサーバーローカル時間で動かすため JST 固定
+      TZ: Asia/Tokyo
+      DOTNET_RUNNING_IN_CONTAINER: "true"
+    volumes:
+      # 投稿済み記事の履歴 (posted_articles.json) を永続化する
+      - ./data:/app/data
+    # Discord はアウトバウンドのみで動くため公開ポートなし

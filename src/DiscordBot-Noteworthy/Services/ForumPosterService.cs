@@ -35,8 +35,7 @@ public sealed class ForumPosterService
         TargetSiteConfig? siteConfig = null,
         CancellationToken cancellationToken = default)
     {
-        var channel = _client.GetChannel(forumChannelId) as IForumChannel;
-        if (channel is null)
+        if (_client.GetChannel(forumChannelId) is not IForumChannel channel)
         {
             _logger.LogError("フォーラムチャンネルが見つかりません: {ChannelId}", forumChannelId);
             return;
@@ -57,7 +56,7 @@ public sealed class ForumPosterService
             : null;
 
         // フォーラムにスレッドを作成（1通目: Embed + 元記事リンク）
-        var thread = await channel.CreatePostAsync(
+        await channel.CreatePostAsync(
             title: Truncate(article.Title, 100),
             text: article.Url,
             embed: embed,

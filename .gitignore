@@ -402,5 +402,9 @@ FodyWeavers.xsd
 
 # Secrets
 appsettings.Secret.json
+.env
+
+# Runtime data
+data/
 
 # End of https://www.toptal.com/developers/gitignore/api/csharp
